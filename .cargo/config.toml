@@ -1,0 +1,7 @@
+[target.armv7r-none-eabihf]
+rustflags = [
+    "-C", "link-arg=-Tscript.ld",
+]
+
+[build]
+target = "armv7r-none-eabihf"
