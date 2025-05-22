@@ -68,6 +68,8 @@ reset_handler:
 	LDR sp, =__sys_stack_end
 
 	# Initialize VFPv3
+	LDR r0, =0x00f00000
+	MCR p15, 0, r0, c1, c0, 2
 	LDR r0, =0x40000000
 	VMSR fpexc, r0
 
