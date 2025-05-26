@@ -1,5 +1,26 @@
-.macro NOP_MAC
-	LDR pc, =reset_handler
+# Workaround for https://github.com/rust-lang/rust/issues/127269
+.fpu vfpv3-d16
+
+.macro CREATE_FRAME
+	PUSH {{r0-r3}}
+	VPUSH {{d0-d7}}
+	VMRS r0, FPSCR
+	VMRS r1, FPEXC
+	# 8-byte align stack
+	MOV r2, sp
+	AND r2, 7
+	SUB sp, r2
+	# Store 4x 4 byte registers to retain 8-byte alignment
+	PUSH {{r0-r2,r12}}
+.endm
+
+.macro DESTROY_FRAME
+	POP {{r0-r2,r12}}
+	ADD sp, r2
+	VMSR FPEXC, r1
+	VMSR FPSCR, r0
+	VPOP {{d0-d7}}
+	POP {{r0-r3}}
 .endm
 
 .extern __und_stack_end
@@ -16,24 +37,27 @@
 .extern __data_start_ram
 
 .section .vector_table,"ax"
-	LDR pc, =reset_handler
-	LDR pc, =undefined_instruction_handler
-	LDR pc, =software_interrupt_handler
-	LDR pc, =abort_prefetch_handler
-	LDR pc, =abort_data_handler
+	B reset_handler
+	B undefined_instruction_handler
+	B software_interrupt_handler
+	B abort_prefetch_handler
+	B abort_data_handler
 	NOP
-	LDR pc, =irq_handler
-yyy:
-	B yyy
+	B irq_handler
+fiq_handler:
+	# Adjust LR to instruction following instruction boundary at which the
+	# exception was taken
+	# ARM Architecture Reference Manual ARMv7-A and ARMv7-R edition
+	# B1.9.12 - FIQ exception
+	# Page B1-1221
+	SUBS lr, 4
+	SRSFD sp!, 0b10001
+	CREATE_FRAME
+	BL _fiq_handler
+	DESTROY_FRAME
+	RFEFD sp!
 
 .section .text
-undefined_instruction_handler:
-software_interrupt_handler:
-abort_prefetch_handler:
-abort_data_handler:
-irq_handler:
-	B irq_handler
-
 reset_handler:
 	# UND - 0x1B - Undefined
 	# I = 1, F = 1
@@ -105,3 +129,59 @@ data_done:
 	BL _start
 reset_spin:
 	B reset_spin
+
+undefined_instruction_handler:
+	# Spin.  This should be changed if undefined instructions are handled
+undef_spin:
+	B undef_spin
+
+software_interrupt_handler:
+	SRSFD sp!, 0b10011
+	CREATE_FRAME
+	# Ignore SVC vector number, since that would require loading the
+	# calling instruction into data cache
+	# assume that the arguments to the SVC handler are passed in r0-r3
+	BL _svc_handler
+	DESTROY_FRAME
+	RFEFD sp!
+
+abort_prefetch_handler:
+	# Adjust LR to aborting instruction
+	# ARM Architecture Reference Manual ARMv7-A and ARMv7-R edition
+	# B1.9.7 - Prefetch Abort exception
+	# Page B1-1212
+	SUBS lr, 4
+	SRSFD sp!, 0b10111
+	CREATE_FRAME
+	# Pass address of aborting instruction to handler
+	MOV r0, lr
+	BL _abort_prefetch_handler
+	DESTROY_FRAME
+	RFEFD sp!
+
+abort_data_handler:
+	# Adjust LR to aborting instruction
+	# ARM Architecture Reference Manual ARMv7-A and ARMv7-R edition
+	# B1.9.8 - Data Abort exception
+	# Page B1-1212
+	SUBS lr, 8
+	SRSFD sp!, 0b10111
+	CREATE_FRAME
+	# Pass address of aborting instruction to handler
+	MOV r0, lr
+	BL _abort_data_handler
+	DESTROY_FRAME
+	RFEFD sp!
+
+irq_handler:
+	# Adjust LR to instruction following instruction boundary at which the
+	# exception was taken
+	# ARM Architecture Reference Manual ARMv7-A and ARMv7-R edition
+	# B1.9.10 - IRQ exception
+	# Page B1-1218
+	SUBS lr, 4
+	SRSFD sp!, 0b10010
+	CREATE_FRAME
+	BL _irq_handler
+	DESTROY_FRAME
+	RFEFD sp!
