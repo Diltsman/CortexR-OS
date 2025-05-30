@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+pub mod rustos;
+
 use core::{arch::global_asm, panic::PanicInfo, u32};
 
 global_asm!(include_str!("handlers.S"));
@@ -12,6 +14,7 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> () {
+    rustos::rm46l852pge::peripherals::sys::set_pena();
     loop {}
 }
 

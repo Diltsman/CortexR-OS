@@ -5,6 +5,8 @@ STACK_SIZE = 128;
 MEMORY {
   tcm_flash(rx) : ORIGIN = 0x00000000, LENGTH = 1280K
   tcm_ram(!rx)  : ORIGIN = 0x08000000, LENGTH =  192K
+
+  sys(w)        : ORIGIN = 0xffffff00, LENGTH = 0xfc
 }
 
 SECTIONS {
@@ -83,4 +85,12 @@ SECTIONS {
     . = ALIGN(8);
     __sys_stack_end = .;
   } > tcm_ram
+
+  .sys (NOLOAD) : {
+    __sys_start = .;
+    *(.sys .sys*);
+    __sys_end = .;
+  } > sys
 }
+
+ASSERT(__sys_end - __sys_start == 0xfc, "SYS must be 0xfc bytes long (63x 32-bit ints)");
