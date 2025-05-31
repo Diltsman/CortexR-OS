@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+pub mod abstraction;
 pub mod rustos;
 
 use core::{arch::global_asm, panic::PanicInfo, u32};
